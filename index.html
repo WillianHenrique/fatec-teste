@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Validador de Importação RH</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f6f8fb; color:#1a1a1a; }
+    .card { background:#fff; border:1px solid #d9e0ea; border-radius:10px; padding:16px; margin-bottom:16px; }
+    h1,h2 { margin-top:0; }
+    .ok{ color:#0b7a2a; font-weight:bold; }
+    .warn{ color:#a05a00; font-weight:bold; }
+    .err{ color:#b20000; font-weight:bold; }
+    table{ border-collapse: collapse; width:100%; margin-top:12px; }
+    th,td{ border:1px solid #d9e0ea; padding:8px; text-align:left; font-size:14px; }
+    th{ background:#eef3fb; }
+    input,select{ padding:8px; margin:4px 0; width:100%; box-sizing:border-box; }
+    button{ background:#2358d8; color:#fff; border:none; border-radius:6px; padding:10px 14px; cursor:pointer; }
+    button:hover{ background:#1a45ab; }
+    .grid{ display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:8px; }
+    code{ background:#f0f3f8; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>Painel de Teste — Importação e Cadastro RH</h1>
+
+  <div class="card">
+    <h2>Modelo oficial obrigatório</h2>
+    <p><code>Nome,Sexo,Data_Nascimento,Idade,Data_Admissao,Setor,Cidade,Cargo</code></p>
+    <p><a href="dados_teste_importacao.csv" download>Baixar CSV de exemplo (abre no Excel)</a></p>
+  </div>
+
+  <div class="card">
+    <h2>1) Testar importação CSV</h2>
+    <input id="csvFile" type="file" accept=".csv" />
+    <button id="validateBtn">Validar Importação</button>
+    <div id="status" style="margin-top:10px;"></div>
+    <div id="issues"></div>
+    <div id="preview"></div>
+  </div>
+
+  <div class="card">
+    <h2>2) Simular cadastro de funcionário</h2>
+    <div class="grid">
+      <input id="Nome" placeholder="Nome" />
+      <select id="Sexo"><option>Masculino</option><option>Feminino</option></select>
+      <input id="Data_Nascimento" type="date" />
+      <input id="Idade" type="number" placeholder="Idade" />
+      <input id="Data_Admissao" type="date" />
+      <input id="Setor" placeholder="Setor" />
+      <input id="Cidade" placeholder="Cidade" />
+      <input id="Cargo" placeholder="Cargo" />
+    </div>
+    <button id="addBtn">Adicionar na grade</button>
+    <button id="downloadBtn">Baixar CSV atualizado</button>
+    <div id="cadastroTable"></div>
+  </div>
+
+  <script>
+    const REQUIRED_HEADER = ["Nome","Sexo","Data_Nascimento","Idade","Data_Admissao","Setor","Cidade","Cargo"];
+    let rows = [];
+
+    function parseCSV(text){
+      const lines = text.trim().split(/\r?\n/).filter(Boolean);
+      const header = lines[0].split(',').map(s => s.trim());
+      const dataRows = lines.slice(1).map(line => line.split(',').map(v => v.trim()));
+      return {header, dataRows};
+    }
+
+    function renderStatus(kind, message){
+      document.getElementById('status').innerHTML = `<span class="${kind}">${message}</span>`;
+    }
+
+    function validate(header, dataRows){
+      const issues = [];
+      if (header.length !== REQUIRED_HEADER.length) {
+        issues.push(`Quantidade de colunas inválida: recebido ${header.length}, esperado ${REQUIRED_HEADER.length}.`);
+      }
+      REQUIRED_HEADER.forEach((col, idx) => {
+        if (header[idx] !== col) {
+          issues.push(`Posição ${idx+1}: esperado "${col}", recebido "${header[idx] ?? '(ausente)'}".`);
+        }
+      });
+
+      dataRows.forEach((r, i) => {
+        if (r.length !== REQUIRED_HEADER.length) {
+          issues.push(`Linha ${i+2}: quantidade de colunas inválida.`);
+        }
+      });
+
+      return issues;
+    }
+
+    function renderIssues(issues){
+      const el = document.getElementById('issues');
+      if (!issues.length){ el.innerHTML = ''; return; }
+      el.innerHTML = `<h3>Inconsistências</h3><ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul>`;
+    }
+
+    function renderPreview(header, dataRows){
+      const el = document.getElementById('preview');
+      const table = `
+        <h3>Pré-visualização</h3>
+        <table>
+          <thead><tr>${header.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${dataRows.slice(0,8).map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      `;
+      el.innerHTML = table;
+    }
+
+    function renderCadastroTable(){
+      const el = document.getElementById('cadastroTable');
+      if(!rows.length){ el.innerHTML = '<p>Nenhum cadastro adicionado.</p>'; return; }
+      el.innerHTML = `
+      <table>
+        <thead><tr>${REQUIRED_HEADER.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr>${REQUIRED_HEADER.map(h => `<td>${r[h] ?? ''}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>`;
+    }
+
+    function downloadCSV(){
+      const header = REQUIRED_HEADER.join(',');
+      const body = rows.map(r => REQUIRED_HEADER.map(h => r[h] ?? '').join(',')).join('\n');
+      const csv = `${header}\n${body}`;
+      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cadastros_rh.csv';
+      a.click();
+    }
+
+    document.getElementById('validateBtn').addEventListener('click', async () => {
+      const file = document.getElementById('csvFile').files[0];
+      if(!file){ renderStatus('warn','Selecione um CSV antes de validar.'); return; }
+      const text = await file.text();
+      const {header, dataRows} = parseCSV(text);
+      const issues = validate(header, dataRows);
+      renderPreview(header, dataRows);
+      renderIssues(issues);
+      if (!issues.length) renderStatus('ok','Status da Importação: Aprovada');
+      else renderStatus('err','Status da Importação: Rejeitada');
+    });
+
+    document.getElementById('addBtn').addEventListener('click', () => {
+      const obj = {};
+      for (const h of REQUIRED_HEADER) obj[h] = document.getElementById(h).value.trim();
+      if (Object.values(obj).some(v => !v)) { alert('Preencha todos os campos para adicionar.'); return; }
+      rows.push(obj);
+      renderCadastroTable();
+    });
+
+    document.getElementById('downloadBtn').addEventListener('click', downloadCSV);
+    renderCadastroTable();
+  </script>
+</body>
+</html>
